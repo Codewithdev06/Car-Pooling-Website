@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Available Rides | Carpool Connect</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <h1>🚗 Carpool Connect</h1>
+        <nav>
+            <a href="index.html">Home</a>
+            <a href="rides.html">Find a Ride</a>
+            <a href="offer.html">Offer a Ride</a>
+            <a href="contact.html">Contact</a>
+            <a href="login.html">Login</a>
+            <a href="signup.html">Sign Up</a>
+        </nav>
+    </header>
+
+    <main>
+        <section class="form-section">
+            <h2>Available Rides</h2>
+            <div id="message" class="message"></div>
+            <div id="rideList" class="ride-list"></div>
+            <p id="noRides" style="text-align: center; font-size: 1.2rem; color: #666; display: none;">No rides available yet. <a href="offer.html">Be the first to offer one!</a></p>
+            <p id="errorRides" style="text-align: center; font-size: 1.2rem; color: var(--error-color); display: none;">Error loading rides. <button onclick="loadRides()" style="background: none; color: var(--primary-color); border: none; text-decoration: underline; cursor: pointer;">Retry</button></p>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2024 Carpool Connect. Ride Together, Save Together.</p>
+    </footer>
+
+    <script>
+        // Unified message function
+        function showMessage(text, type = 'info') {
+            const messageEl = document.getElementById('message');
+            messageEl.textContent = text;
+            messageEl.className = `message ${type}`;
+            messageEl.style.display = 'block';
+            messageEl.setAttribute('role', 'alert');
+            setTimeout(() => {
+                messageEl.style.display = 'none';
+            }, 4000);
+        }
+
+        // Safe localStorage helpers
+        function getRides() {
+            try {
+                const rides = localStorage.getItem('rides');
+                if (!rides) return [];
+                const parsed = JSON.parse(rides);
+                // Sanitize: Ensure each ride has required fields
+                return Array.isArray(parsed) ? parsed.filter(ride => ride && ride.id && ride.from && ride.to && ride.date && ride.time && typeof ride.seats === 'number' && typeof ride.price === 'number') : [];
+            } catch (e) {
+                console.error('Error loading rides:', e);
+                showMessage('⚠️ Error loading rides data. Clearing cache and retrying.', 'error');
+                localStorage.removeItem('rides'); // Clear corrupted data
+                return [];
+            }
+        }
+
+        function saveRides(rides) {
+            try {
+                localStorage.setItem('rides', JSON.stringify(rides));
+            } catch (e) {
+                console.error('Error saving rides:', e);
+                showMessage('❌ Failed to update rides list.', 'error');
+            }
+        }
+
+        // Get logged-in user
+        function getLoggedInUser() {
+            try {
+                const userData = localStorage.getItem('loggedInUser');
+                return userData ? JSON.parse(userData) : null;
+            } catch (e) {
+                console.warn('Error loading user session:', e);
+                return null;
+            }
+        }
+
+        // Load and display rides
+        function loadRides() {
+            try {
+                const rides = getRides();
+                const rideList = document.getElementById('rideList');
+                const noRidesEl = document.getElementById('noRides');
+                const errorRidesEl = document.getElementById('errorRides');
+
+                if (rides.length === 0) {
+                    rideList.innerHTML = '';
+                    noRidesEl.style.display = 'block';
+                    errorRidesEl.style.display = 'none';
+                    return;
+                }
+
+                noRidesEl.style.display = 'none';
+                errorRidesEl.style.display = 'none';
+
+                rideList.innerHTML = rides.map(ride => {
+                    // Sanitize ride data to prevent errors
+                    const safeRide = {
+                        id: ride.id || '',
+                        from: (ride.from || '').toString().trim(),
+                        to: (ride.to || '').toString().trim(),
+                        date: ride.date || '',
+                        time: ride.time || '',
+                        seats: Math.max(0, Number(ride.seats) || 0),
+                        price: Math.max(0, Number(ride.price) || 0),
+                        offeredBy: (ride.offeredBy || 'Anonymous').toString().trim()
+                    };
+
+                    return `
+                        <div class="ride-card" data-id="${safeRide.id}" role="article">
+                            <h3>
+                                ${safeRide.from} → ${safeRide.to}
+                                <span>₹${safeRide.price.toFixed(2)}</span>
+                            </h3>
+                            <p><strong>📅 Date:</strong> ${safeRide.date}</p>
+                            <p><strong>🕒 Time:</strong> ${safeRide.time}</p>
+                            <p><strong>👥 Seats:</strong> ${safeRide.seats} available</p>
+                            <p><strong>👤 Offered by:</strong> ${safeRide.offeredBy}</p>
+                            <a href="booking.html?rideId=${safeRide.id}" class="book-btn" role="button" aria-label="Book ride from ${safeRide.from} to ${safeRide.to}">Book Now</a>
+                        </div>
+                    `;
+                }).join('');
+
+                // Personalize if logged in
+                const user = getLoggedInUser();
+                if (user && rides.length > 0) {
+                    showMessage(`👋 Welcome, ${user.name}! Found ${rides.length} available rides.`, 'info');
+                }
+            } catch (e) {
+                console.error('Error in loadRides:', e);
+                document.getElementById('rideList').innerHTML = '';
+                document.getElementById('errorRides').style.display = 'block';
+            }
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadRides();
+        });
+    </script>
+</body>
+</html>

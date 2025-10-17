@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Available Rides | Carpool Connect</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* Modal Styles (add to style.css or inline for self-containment) */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0, 0, 0, 0.5);
+            animation: fadeIn 0.3s;
+        }
+        .modal-content {
+            background-color: #fff;
+            margin: 15% auto;
+            padding: 20px;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 400px;
+            text-align: center;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+        .modal h3 {
+            margin-top: 0;
+            color: var(--primary-color, #007bff);
+        }
+        .modal p {
+            font-size: 1.1rem;
+            margin-bottom: 20px;
+        }
+        .btn-primary, .btn-secondary {
+            padding: 10px 20px;
+            margin: 0 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+        .btn-primary {
+            background-color: var(--primary-color, #007bff);
+            color: white;
+        }
+        .btn-primary:hover {
+            background-color: var(--primary-dark, #0056b3);
+        }
+        .btn-secondary {
+            background-color: #6c757d;
+            color: white;
+        }
+        .btn-secondary:hover {
+            background-color: #545b62;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>🚗 Carpool Connect</h1>
+        <nav>
+            <a href="index.html">Home</a>
+            <a href="rides.html">Find a Ride</a>
+            <a href="offer.html">Offer a Ride</a>
+            <a href="contact.html">Contact</a>
+            <a href="login.html">Login</a>
+            <a href="signup.html">Sign Up</a>
+        </nav>
+    </header>
+
+    <main>
+        <section class="form-section">
+            <h2>Available Rides</h2>
+            <div id="message" class="message"></div>
+            <div id="rideList" class="ride-list"></div>
+            <p id="noRides" style="text-align: center; font-size: 1.2rem; color: #666; display: none;">No rides available yet. <a href="offer.html">Be the first to offer one!</a></p>
+            <p id="errorRides" style="text-align: center; font-size: 1.2rem; color: var(--error-color); display: none;">Error loading rides. <button onclick="loadRides()" style="background: none; color: var(--primary-color); border: none; text-decoration: underline; cursor: pointer;">Retry</button></p>
+        </section>
+    </main>
+
+    <!-- Confirmation Modal -->
+    <div id="confirmModal" class="modal">
+        <div class="modal-content">
+            <h3>Confirm Your Booking</h3>
+            <p id="confirmText"></p>
+            <button id="confirmYes" class="btn-primary">Yes, Book It!</button>
+            <button id="confirmNo" class="btn-secondary">Cancel</button>
+        </div>
+    </div>
+
+    <footer>
+        <p>&copy; 2024 Carpool Connect. Ride Together, Save Together.</p>
+    </footer>
+
+    <script>
+        // Unified message function
+        function showMessage(text, type = 'info') {
+            const messageEl = document.getElementById('message');
+            messageEl.textContent = text;
+            messageEl.className = `message ${type}`;
+            messageEl.style.display = 'block';
+            messageEl.setAttribute('role', 'alert');
+            setTimeout(() => {
+                messageEl.style.display = 'none';
+            }, 4000);
+        }
+
+        // Safe localStorage helpers
+        function getRides() {
+            try {
+                const rides = localStorage.getItem('rides');
+                if (!rides) return [];
+                const parsed = JSON.parse(rides);
+                // Sanitize: Ensure each ride has required fields
+                return Array.isArray(parsed) ? parsed.filter(ride => ride && ride.id && ride.from && ride.to && ride.date && ride.time && typeof ride.seats === 'number' && typeof ride.price === 'number') : [];
+            } catch (e) {
+                console.error('Error loading rides:', e);
+                showMessage('⚠️ Error loading rides data. Clearing cache and retrying.', 'error');
+                localStorage.removeItem('rides'); // Clear corrupted data
+                return [];
+            }
+        }
+
+        function saveRides(rides) {
+            try {
+                localStorage.setItem('rides', JSON.stringify(rides));
+            } catch (e) {
+                console.error('Error saving rides:', e);
+                showMessage('❌ Failed to update rides list.', 'error');
+            }
+        }
+
+        // Get logged-in user
+        function getLoggedInUser() {
+            try {
+                const userData = localStorage.getItem('loggedInUser');
+                return userData ? JSON.parse(userData) : null;
+            } catch (e) {
+                console.warn('Error loading user session:', e);
+                return null;
+            }
+        }
+
+        // Get a specific ride by ID
+        function getRideById(rideId) {
+            const rides = getRides();
+            return rides.find(ride => ride.id === rideId) || null;
+        }
+
+        // Load and display rides
+        function loadRides() {
+            try {
+                const rides = getRides();
+                const rideList = document.getElementById('rideList');
+                const noRidesEl = document.getElementById('noRides');
+                const errorRidesEl = document.getElementById('errorRides');
+
+                if (rides.length === 0) {
+                    rideList.innerHTML = '';
+                    noRidesEl.style.display = 'block';
+                    errorRidesEl.style.display = 'none';
+                    return;
+                }
+
+                noRidesEl.style.display = 'none';
+                errorRidesEl.style.display = 'none';
+
+                rideList.innerHTML = rides.map(ride => {
+                    // Sanitize ride data to prevent errors
+                    const safeRide = {
+                        id: ride.id || '',
+                        from: (ride.from || '').toString().trim(),
+                        to: (ride.to || '').toString().trim(),
+                        date: ride.date || '',
+                        time: ride.time || '',
+                        seats: Math.max(0, Number(ride.seats) || 0),
+                        price: Math.max(0, Number(ride.price) || 0),
+                        offeredBy: (ride.offeredBy || 'Anonymous').toString().trim()
+                    };
+
+                    return `
+                        <div class="ride-card" data-id="${safeRide.id}" role="article">
+                            <h3>
+                                ${safeRide.from} → ${safeRide.to}
+                                <span>$${safeRide.price.toFixed(2)}</span>
+                            </h3>
+                            <p><strong>📅 Date:</strong> ${safeRide.date}</p>
+                            <p><strong>🕒 Time:</strong> ${safeRide.time}</p>
+                            <p><strong>👥 Seats:</strong> ${safeRide.seats} available</p>
+                            <p><strong>👤 Offered by:</strong> ${safeRide.offeredBy}</p>
+                            <button class="book-btn" data-ride-id="${safeRide.id}" aria-label="Book ride from ${safeRide.from} to ${safeRide.to}">Book Now</button>
+                        </div>
+                    `;
+                }).join('');
+
+                // Personalize if logged in
+                const user = getLoggedInUser();
+                if (user && rides.length > 0) {
+                    showMessage(`👋 Welcome, ${user.name}! Found ${rides.length} available rides.`, 'info');
+                }
+            } catch (e) {
+                console.error('Error in loadRides:', e);
+                document.getElementById('rideList').innerHTML = '';
+                document.getElementById('errorRides').style.display = 'block';
+            }
+        }
+
+        // Show confirmation modal
+        function showConfirmModal(rideId) {
+            const ride = getRideById(rideId);
+            if (!ride) {
+                showMessage('❌ Ride not found. Please refresh the page.', 'error');
+                return;
+            }
+
+            const user = getLoggedInUser();
+            const confirmText = document.getElementById('confirmText');
+            const confirmMsg = user 
+                ? `Are you sure you want to book this ride from ${ride.from} to ${ride.to} on ${ride.date} at ${ride.time}? It will be removed from available rides after booking as ${user.name}.`
+                : `Are you sure you want to book this ride from ${ride.from} to ${ride.to} on ${ride.date} at ${ride.time}? It will be removed from available rides. (Log in for full personalization.)`;
+
+            confirmText.textContent = confirmMsg;
+
+            const modal = document.getElementById('confirmModal');
+            modal.style.display = 'block';
+
+            // Set rideId on yes button for later use
+            document.getElementById('confirmYes').setAttribute('data-ride-id', rideId);
+                
+            // Close modal on no or outside click
+            document.getElementById('confirmNo').onclick = function() {
+                modal.style.display = 'none';
+            };
+
+            window.onclick = function(event) {
+                if (event.target === modal) {
+                    modal.style.display = 'none';
+                }
+            };
+        }
+
+        // Handle confirmed booking
+        function handleConfirmedBooking(rideId) {
+            if (!rideId || typeof rideId !== 'string') {
+                showMessage('❌ Invalid ride selected.', 'error');
+                return;
+            }
+
+            const user = getLoggedInUser();
+            let rides = getRides();
+            const initialLength = rides.length;
+            rides = rides.filter(ride => ride.id !== rideId);
+
+            if (rides.length === initialLength) {
+                showMessage('❌ Ride not found or already booked. Please refresh the page.', 'error');
+                loadRides(); // Retry load
+                return;
+            }
+
+            saveRides(rides);
+            loadRides(); // Refresh display
+            document.getElementById('confirmModal').style.display = 'none'; // Close modal
+
+            const bookMsg = user 
+                ? `✅ Ride booked successfully by ${user.name}! It's now removed from the list. Check your bookings or email for details.`
+                : '✅ Ride booked successfully! It has been removed from the available list. Log in to manage your bookings.';
+            showMessage(bookMsg, 'success');
+        }
+
+        // Event delegation for booking buttons (handles dynamic content)
+        document.addEventListener('click', function(e) {
+            if (e.target.classList.contains('book-btn')) {
+                const rideId = e.target.getAttribute('data-ride-id');
+                showConfirmModal(rideId); // Show modal instead of immediate confirm
+            } else if (e.target.id === 'confirmYes') {
+                const rideId = e.target.getAttribute('data-ride-id');
+                handleConfirmedBooking(rideId); // Proceed with booking
+            }
+        });
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadRides();
+        });
+    </script>
+</body>
+</html>
